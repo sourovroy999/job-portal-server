@@ -2,6 +2,9 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const express = require('express');
 
+const jwt=require('jsonwebtoken')
+const cookieParser=require('cookie-parser')
+
 //must be dite hobe
 require('dotenv').config()
 
@@ -9,11 +12,45 @@ const cors = require('cors');
 const app=express()
 const port=process.env.PORT || 3000;
 
-app.use(cors())
+//middle wire
+app.use(cors({
+    origin:['http://localhost:5174'],
+    credentials:true
+}))
 app.use(express.json())
+app.use(cookieParser())
 
 //roommaster
 //room6969
+
+const logger=(req,res,next)=>{
+    console.log('insise the logger');
+    next()
+    
+}
+
+const verifyToken=(req,res,next)=>{
+    // console.log('inside verify token middlewire', req.cookies);
+    const token=req.cookies?.token; // token use kora hoice karom cookies call korar smy token name e call kora hoice, check  -> app.post('/jwt'.....
+
+
+
+    if(!token){
+        return res.status(401).send({message:'Unauthorizes access'})
+    }
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET,(err,decoded)=>{
+        if(err){
+            return res.status(401).send({message:'Authorized access'})
+        }
+
+        req.tokenInformation=decoded; //req.jekono name
+
+        //
+       next()
+
+    })
+    
+}
 
 
 
@@ -42,7 +79,24 @@ async function run() {
 
     const jobApplicationCollection=client.db('JobPortalDB').collection('job_applications')
 
-    app.get('/jobs',async(req,res)=>{
+    //auth related APIs
+    app.post('/jwt', async(req,res)=>{
+        const user=req.body;
+        const token=jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '1h'})
+        res
+        .cookie('token', token, {
+            httpOnly:true,
+            secure:false
+        })
+        .send({success: true})
+
+    })
+
+
+
+    app.get('/jobs',logger, async(req,res)=>{
+        console.log('now inside the api callback');
+        
 
         const email=req.query.email;
         let query={};
@@ -118,9 +172,20 @@ async function run() {
     })
 
     //get job appliccants apllied data by query
-    app.get('/job-application',async(req,res)=>{
+    app.get('/job-application', verifyToken, async(req,res)=>{
         const email=req.query.email;
         const query={ applicant_email: email }
+
+        // console.log('cookiessss ', req.cookies);
+        // console.log(req.tokenInformation.email);
+        // console.log(req.query.email);
+        
+        
+
+        if(req.tokenInformation.email !== req.query.email){
+            return res.status(403).send({message: 'forbidden access'})
+        }
+        
         const result=await jobApplicationCollection.find(query).toArray();
 
         //fokira way to aggregate data. this is not the best way
