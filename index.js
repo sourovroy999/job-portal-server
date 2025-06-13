@@ -14,14 +14,22 @@ const port=process.env.PORT || 3000;
 
 //middle wire
 app.use(cors({
-    origin:['http://localhost:5174'],
-    credentials:true
+    origin:[
+        'http://localhost:5174',
+        'https://job-portal-39e4b.web.app',
+        'https://job-portal-39e4b.firebaseapp.com'
+    ],
+    credentials:true,
+    //  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    // allowedHeaders: ['Content-Type', 'Authorization']
 }))
 app.use(express.json())
 app.use(cookieParser())
 
-//roommaster
-//room6969
+
+
+// Handle preflight for all routes
+// app.options('*', cors());
 
 const logger=(req,res,next)=>{
     console.log('insise the logger');
@@ -40,10 +48,11 @@ const verifyToken=(req,res,next)=>{
     }
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET,(err,decoded)=>{
         if(err){
-            return res.status(401).send({message:'Authorized access'})
+            return res.status(401).send({message:'UnAuthorized access'})
         }
 
-        req.tokenInformation=decoded; //req.jekono name
+        //token ta kar seta bojhar jnnoo
+        req.tokenInformation=decoded; //req.jekono_name=decoded
 
         //
        next()
@@ -68,10 +77,10 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
     //jobs reated apis
 
@@ -82,14 +91,28 @@ async function run() {
     //auth related APIs
     app.post('/jwt', async(req,res)=>{
         const user=req.body;
-        const token=jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '1h'})
+        const token=jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '5h'})
         res
         .cookie('token', token, {
             httpOnly:true,
-            secure:false
+            // secure:false,
+            secure:process.env.NODE_ENV === 'production',
+              sameSite:process.env.NODE_ENV === "production" ? "none" : "strict"
+              
         })
         .send({success: true})
 
+    })
+
+
+    app.post('/logout', (req,res)=>{
+        res.clearCookie('token',{
+            httpOnly:true,
+            // secure:true,
+               secure:process.env.NODE_ENV === 'production',
+             sameSite:process.env.NODE_ENV === "production" ? "none" : "strict"
+        })
+        .send({success: true})
     })
 
 
@@ -182,7 +205,8 @@ async function run() {
         
         
 
-        if(req.tokenInformation.email !== req.query.email){
+        if(req.tokenInformation.email !== req.query.email) //token email !== query email
+            {
             return res.status(403).send({message: 'forbidden access'})
         }
         
@@ -194,6 +218,8 @@ async function run() {
             
             const query1={_id: new ObjectId(appliation.job_id)}
             const job=await jobsCollection.findOne(query1)
+            
+            
 
             if(job){
                 appliation.title=job.title;
